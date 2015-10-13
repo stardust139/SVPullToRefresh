@@ -9,6 +9,7 @@
 
 #import <QuartzCore/QuartzCore.h>
 #import "UIScrollView+SVInfiniteScrolling.h"
+#import "UIColor+Hex.h"
 
 
 static CGFloat const SVInfiniteScrollingViewHeight = 60;
@@ -25,13 +26,14 @@ static CGFloat const SVInfiniteScrollingViewHeight = 60;
 
 @property (nonatomic, copy) void (^infiniteScrollingHandler)(void);
 
-@property (nonatomic, strong) UIActivityIndicatorView *activityIndicatorView;
+@property (nonatomic, strong) UIImageView *activityIndicatorView;
 @property (nonatomic, readwrite) SVInfiniteScrollingState state;
 @property (nonatomic, strong) NSMutableArray *viewForState;
 @property (nonatomic, weak) UIScrollView *scrollView;
 @property (nonatomic, readwrite) CGFloat originalBottomInset;
 @property (nonatomic, assign) BOOL wasTriggeredByUser;
 @property (nonatomic, assign) BOOL isObserving;
+@property (nonatomic, strong) UILabel * tipsLabel;
 
 - (void)resetScrollViewContentInset;
 - (void)setScrollViewContentInsetForInfiniteScrolling;
@@ -117,18 +119,16 @@ UIEdgeInsets scrollViewOriginalContentInsets;
 @implementation SVInfiniteScrollingView
 
 // public properties
-@synthesize infiniteScrollingHandler, activityIndicatorViewStyle;
+@synthesize infiniteScrollingHandler;
 
 @synthesize state = _state;
 @synthesize scrollView = _scrollView;
-@synthesize activityIndicatorView = _activityIndicatorView;
 
 
 - (id)initWithFrame:(CGRect)frame {
     if(self = [super initWithFrame:frame]) {
         
         // default styling values
-        self.activityIndicatorViewStyle = UIActivityIndicatorViewStyleGray;
         self.autoresizingMask = UIViewAutoresizingFlexibleWidth;
         self.state = SVInfiniteScrollingStateStopped;
         self.enabled = YES;
@@ -153,7 +153,8 @@ UIEdgeInsets scrollViewOriginalContentInsets;
 }
 
 - (void)layoutSubviews {
-    self.activityIndicatorView.center = CGPointMake(self.bounds.size.width/2, self.bounds.size.height/2);
+    self.activityIndicatorView.center = CGPointMake(self.bounds.size.width/2 - 60, self.bounds.size.height/2);
+    self.tipsLabel.center = CGPointMake(self.bounds.size.width/2 + 20, self.bounds.size.height/2);
 }
 
 #pragma mark - Scroll View
@@ -193,6 +194,15 @@ UIEdgeInsets scrollViewOriginalContentInsets;
 
 - (void)scrollViewDidScroll:(CGPoint)contentOffset {
     if(self.state != SVInfiniteScrollingStateLoading && self.enabled) {
+        
+        // To avoid triggering by the bounding motion from PullToRefresh
+        if(contentOffset.y <= 0) {
+            if (contentOffset.y < -60) {
+                self.state = SVInfiniteScrollingStateStopped;
+            }
+            return;
+        }
+//        NSLog(@"contentOffset.y is %f",contentOffset.y);
         CGFloat scrollViewContentHeight = self.scrollView.contentSize.height;
         CGFloat scrollOffsetThreshold = scrollViewContentHeight-self.scrollView.bounds.size.height;
         
@@ -200,25 +210,41 @@ UIEdgeInsets scrollViewOriginalContentInsets;
             self.state = SVInfiniteScrollingStateLoading;
         else if(contentOffset.y > scrollOffsetThreshold && self.state == SVInfiniteScrollingStateStopped && self.scrollView.isDragging)
             self.state = SVInfiniteScrollingStateTriggered;
-        else if(contentOffset.y < scrollOffsetThreshold  && self.state != SVInfiniteScrollingStateStopped)
-            self.state = SVInfiniteScrollingStateStopped;
+        else if(contentOffset.y < scrollOffsetThreshold  && self.state != SVInfiniteScrollingStateStopped) {
+            if (self.state != SVInfiniteScrollingStateEndData) {
+                self.state = SVInfiniteScrollingStateStopped;
+            }
+        } else if (self.state == SVInfiniteScrollingStateEndData) {
+
+        }
+        
     }
 }
 
 #pragma mark - Getters
 
-- (UIActivityIndicatorView *)activityIndicatorView {
+- (UIImageView *)activityIndicatorView {
     if(!_activityIndicatorView) {
-        _activityIndicatorView = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhite];
-        _activityIndicatorView.hidesWhenStopped = YES;
+        _activityIndicatorView = [[UIImageView alloc]initWithFrame:CGRectMake(0, self.bounds.size.height- 45, 30, 30)];
+        _activityIndicatorView.image = [UIImage imageNamed:@"data_sv_loading"];
         [self addSubview:_activityIndicatorView];
+        _activityIndicatorView.hidden = YES;
     }
     return _activityIndicatorView;
 }
 
-- (UIActivityIndicatorViewStyle)activityIndicatorViewStyle {
-    return self.activityIndicatorView.activityIndicatorViewStyle;
+- (UILabel *)tipsLabel
+{
+    if (!_tipsLabel) {
+        _tipsLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, 100, 20)];
+        _tipsLabel.textColor = [UIColor colorWithHex:0xbdbdbd];
+        _tipsLabel.font = [UIFont systemFontOfSize:13];
+        [self addSubview:_tipsLabel];
+    }
+    return _tipsLabel;
 }
+
+
 
 #pragma mark - Setters
 
@@ -236,9 +262,7 @@ UIEdgeInsets scrollViewOriginalContentInsets;
     self.state = self.state;
 }
 
-- (void)setActivityIndicatorViewStyle:(UIActivityIndicatorViewStyle)viewStyle {
-    self.activityIndicatorView.activityIndicatorViewStyle = viewStyle;
-}
+
 
 #pragma mark -
 
@@ -253,6 +277,11 @@ UIEdgeInsets scrollViewOriginalContentInsets;
 
 - (void)stopAnimating {
     self.state = SVInfiniteScrollingStateStopped;
+}
+
+- (void)endDataAnimating
+{
+    self.state = SVInfiniteScrollingStateEndData;
 }
 
 - (void)setState:(SVInfiniteScrollingState)newState {
@@ -279,26 +308,68 @@ UIEdgeInsets scrollViewOriginalContentInsets;
     }
     else {
         CGRect viewBounds = [self.activityIndicatorView bounds];
-        CGPoint origin = CGPointMake(roundf((self.bounds.size.width-viewBounds.size.width)/2), roundf((self.bounds.size.height-viewBounds.size.height)/2));
+        CGPoint origin = CGPointMake(roundf((self.bounds.size.width-viewBounds.size.width)/2 - 60), roundf((self.bounds.size.height-viewBounds.size.height)/2));
         [self.activityIndicatorView setFrame:CGRectMake(origin.x, origin.y, viewBounds.size.width, viewBounds.size.height)];
-        
+        self.tipsLabel.center = CGPointMake(self.bounds.size.width/2 + 20, self.bounds.size.height/2);
+
         switch (newState) {
             case SVInfiniteScrollingStateStopped:
-                [self.activityIndicatorView stopAnimating];
+//                [self resetScrollViewContentInset];
+                [self stopIndicatorAnimating];
+                self.tipsLabel.hidden = YES;
+                self.activityIndicatorView.hidden = YES;
                 break;
                 
             case SVInfiniteScrollingStateTriggered:
-                [self.activityIndicatorView startAnimating];
+                self.tipsLabel.hidden = NO;
+                self.activityIndicatorView.hidden = NO;
+                self.tipsLabel.text = @"正在加载...";
+                [self startIndicatorAnimating];
                 break;
                 
             case SVInfiniteScrollingStateLoading:
-                [self.activityIndicatorView startAnimating];
+                self.tipsLabel.hidden = NO;
+
+                self.tipsLabel.text = @"正在加载...";
+//                [self startIndicatorAnimating];
+                break;
+            case SVInfiniteScrollingStateEndData:
+                self.tipsLabel.hidden = NO;
+                self.tipsLabel.text = @"已经是最后一页了";
+                
+                int64_t delayInSeconds = 1.0;
+                dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, delayInSeconds * NSEC_PER_SEC);
+                dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
+                    [self stopIndicatorAnimating];
+                    self.tipsLabel.hidden = YES;
+                    self.activityIndicatorView.hidden = YES;
+                    [self resetScrollViewContentInset];
+                });
+
                 break;
         }
     }
     
     if(previousState == SVInfiniteScrollingStateTriggered && newState == SVInfiniteScrollingStateLoading && self.infiniteScrollingHandler && self.enabled)
         self.infiniteScrollingHandler();
+}
+
+- (void)startIndicatorAnimating
+{
+    CABasicAnimation *monkeyAnimation = [CABasicAnimation animationWithKeyPath:@"transform.rotation.z"];
+    monkeyAnimation.toValue = [NSNumber numberWithFloat:2.0 *M_PI];
+    monkeyAnimation.duration = 0.8f;
+    monkeyAnimation.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionLinear];
+    monkeyAnimation.cumulative = NO;
+    monkeyAnimation.removedOnCompletion = NO; //No Remove
+    
+    monkeyAnimation.repeatCount = FLT_MAX;
+    [self.activityIndicatorView.layer addAnimation:monkeyAnimation forKey:@"AnimatedKey"];
+}
+
+- (void)stopIndicatorAnimating
+{
+    [self.activityIndicatorView.layer removeAllAnimations];
 }
 
 @end

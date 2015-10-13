@@ -26,6 +26,7 @@ enum {
 	SVInfiniteScrollingStateStopped = 0,
     SVInfiniteScrollingStateTriggered,
     SVInfiniteScrollingStateLoading,
+    SVInfiniteScrollingStateEndData,
     SVInfiniteScrollingStateAll = 10
 };
 
@@ -33,7 +34,6 @@ typedef NSUInteger SVInfiniteScrollingState;
 
 @interface SVInfiniteScrollingView : UIView
 
-@property (nonatomic, readwrite) UIActivityIndicatorViewStyle activityIndicatorViewStyle;
 @property (nonatomic, readonly) SVInfiniteScrollingState state;
 @property (nonatomic, readwrite) BOOL enabled;
 
@@ -41,5 +41,6 @@ typedef NSUInteger SVInfiniteScrollingState;
 
 - (void)startAnimating;
 - (void)stopAnimating;
+- (void)endDataAnimating;
 
 @end
